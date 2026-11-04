@@ -1,0 +1,6 @@
+.phone-camera { position: absolute; inset: 0; }
+.phone-camera-frame { width: 100%; height: 100%; overflow: hidden; background: #171717; }
+.phone-camera-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.phone-camera-controls { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(280px, calc(100% - 32px)); display: grid; justify-items: center; gap: 12px; padding: 18px; border-radius: 18px; background: #222e; color: white; text-align: center; }
+.phone-camera-controls p { margin: 0; }
+.phone-camera-info { position: absolute; z-index: 4; top: 82px; right: 16px; padding: 5px 8px; border-radius: 8px; color: white; background: #222d; }

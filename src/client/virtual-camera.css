@@ -1,0 +1,29 @@
+.virtual-camera { width: 100%; min-width: 0; color: #23322e; }
+.virtual-camera-viewport { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #202b29; overflow: hidden; touch-action: none; cursor: grab; border-radius: 14px; }
+.virtual-camera-viewport:active { cursor: grabbing; }
+.virtual-camera-viewport:focus-visible { outline: 3px solid #2c7964; outline-offset: 3px; }
+.virtual-camera-frame { position: absolute; height: 100%; max-width: 100%; aspect-ratio: 9 / 16; left: 50%; transform: translateX(-50%); overflow: hidden; }
+.virtual-camera-render { position: absolute; inset: 0; }
+.virtual-camera-render canvas { width: 100%; height: 100%; display: block; }
+.virtual-camera-live { position: absolute; top: 12px; left: 12px; border-radius: 20px; padding: 6px 10px; color: white; background: #19352dcc; font-size: 11px; pointer-events: none; }
+.virtual-camera-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-top: 12px; }
+.virtual-camera-move { display: flex; gap: 4px; }
+.virtual-camera-tools button { min-width: 48px; min-height: 48px; padding: 8px 10px; border: 1px solid #d5dfda; border-radius: 10px; color: #29463b; background: #f4f8f5; font: inherit; font-size: 12px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.virtual-camera-tools button:active { background: #c9e0d4; }
+.virtual-camera-tools button:disabled { opacity: .45; }
+.virtual-camera-tools button:focus-visible { outline: 3px solid #2c7964; outline-offset: 2px; }
+.virtual-camera-help { margin: 10px 0 0; font-size: 11px; line-height: 1.5; color: #607269; }
+.virtual-camera-error { position: absolute; inset: 25% 10% auto; color: #542d20; background: #fff5e9; padding: 14px; border-radius: 10px; }
+.virtual-camera-select { position:absolute;inset:0;cursor:crosshair;touch-action:none;background:#12332c12; }
+.virtual-camera-select>span { position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:max-content;max-width:90%;padding:8px 12px;border-radius:8px;background:#173a31ed;color:white;font-size:12px;pointer-events:none; }
+.virtual-camera-track { position:absolute;border:3px solid #e4fa65;box-shadow:0 0 0 1px #19352d;pointer-events:none; }
+.virtual-camera-track>span { position:absolute;left:-3px;bottom:100%;padding:5px 8px;background:#19352ded;color:white;white-space:nowrap;font-size:12px;border-radius:6px 6px 0 0; }
+.virtual-camera-track.is-selecting { border-style:dashed; }
+@media (max-width: 480px) { .virtual-camera-tools { gap: 8px 6px; } .virtual-camera-tools button { padding: 8px; } }
+
+.virtual-camera-demo { margin-top: 12px; font-size: 12px; color: #607269; }
+.virtual-camera-demo summary { cursor: pointer; color: #29463b; }
+.virtual-camera-demo p { margin: 8px 0; line-height: 1.5; }
+
+.live-scan .virtual-camera-demo .weekend-scenario-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+.live-scan .virtual-camera-demo .weekend-scenario-tools button { min-width: 0; width: 100%; white-space: normal; }

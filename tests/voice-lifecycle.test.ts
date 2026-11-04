@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {VoiceLifecycle} from '../src/client/voice-lifecycle.ts';
+function fakeStream(){let stopped=0;return {stream:{getTracks:()=>[{stop:()=>{stopped++;}}]} as unknown as MediaStream,stopped:()=>stopped};}
+test('late microphone permission after cancellation closes the newly granted stream',()=>{const lifecycle=new VoiceLifecycle(),token=lifecycle.begin(),audio=fakeStream();lifecycle.cancel();assert.equal(lifecycle.acceptStream(token,audio.stream),false);assert.equal(audio.stopped(),1);assert.equal(lifecycle.isCurrent(token),false);});
+test('target unmount cancels active tracks and invalidates late transcription',()=>{const lifecycle=new VoiceLifecycle(),token=lifecycle.begin(),audio=fakeStream();assert.equal(lifecycle.acceptStream(token,audio.stream),true);lifecycle.cancel();assert.equal(audio.stopped(),1);assert.equal(lifecycle.isCurrent(token),false);lifecycle.release();assert.equal(audio.stopped(),1);});
+test('new request invalidates an older completion',()=>{const lifecycle=new VoiceLifecycle(),old=lifecycle.begin(),current=lifecycle.begin();assert.equal(lifecycle.isCurrent(old),false);assert.equal(lifecycle.isCurrent(current),true);});
+test('late cleanup from a cancelled recording cannot stop a new recording',()=>{const lifecycle=new VoiceLifecycle(),old=lifecycle.begin(),first=fakeStream();lifecycle.acceptStream(old,first.stream);lifecycle.cancel();const current=lifecycle.begin(),second=fakeStream();lifecycle.acceptStream(current,second.stream);assert.equal(lifecycle.release(old),false);assert.equal(second.stopped(),0);assert.equal(lifecycle.isCurrent(current),true);lifecycle.release(current);assert.equal(second.stopped(),1);});

@@ -1,0 +1,21 @@
+import {createLocalRoomFindProvider} from '../src/server/local-room-find-provider.ts';
+import {createLocalVoiceProvider} from '../src/server/local-voice-provider.ts';
+import {createLocalRoomEditProvider} from '../src/server/local-room-edit-provider.ts';
+/** Isolated unpaid room-observer experiment. Does not load .env or enable other model APIs. */
+import {existsSync,readFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {createScanReviewApp,safeScanFile} from '../src/server/scan-review.ts';
+import {createLocalAgentRoomObserver,type LocalObserverAgent} from '../src/server/local-agent-room-observer.ts';
+const [workspace,bridgeDirectory,portArg='7404',decisionLimitArg='2',agentArg='Sol 6.1']=process.argv.slice(2),port=Number(portArg),decisionLimit=Number(decisionLimitArg);
+if(!workspace||!bridgeDirectory||!Number.isInteger(port)||port<1||port>65535||(decisionLimit!==1&&decisionLimit!==2)||!['Sol 6.1','Terra 6.1'].includes(agentArg)||process.argv.length>7)throw new Error('Usage: local-agent-room-server.ts ISOLATED_WORKSPACE BRIDGE_DIRECTORY [PORT=7404] [DECISION_LIMIT=2, allowed 1 or 2] [AGENT="Sol 6.1", allowed "Sol 6.1" or "Terra 6.1"]');
+process.env.ENABLE_SCAN_TEXT_AGENT='false';process.env.ENABLE_SCAN_DETECTION='false';process.env.ENABLE_ROOM_OBSERVER='false';
+for(const key of ['MODEL_API_KEY','META_CREDITS_CONFIRMED','SCAN_AGENT_BUDGET_DIR','SCAN_DETECTION_BUDGET_DIR','ROOM_OBSERVER_BUDGET_DIR'])delete process.env[key];
+const provider=createLocalAgentRoomObserver({directory:bridgeDirectory,decisionLimit,timeoutMs:180_000,agent:agentArg as LocalObserverAgent});
+const voice=process.env.LOCAL_VOICE_PYTHON&&process.env.LOCAL_VOICE_MODEL&&process.env.LOCAL_VOICE_FFMPEG?createLocalVoiceProvider({python:process.env.LOCAL_VOICE_PYTHON,model:process.env.LOCAL_VOICE_MODEL,ffmpeg:process.env.LOCAL_VOICE_FFMPEG,bridge:resolve('scripts/local-voice-transcribe.py')}):undefined;
+const app=createScanReviewApp(workspace,{port,voice,allowTestAudio:true,roomObserver:{provider,localAgent:true,editProvider:createLocalRoomEditProvider(join(bridgeDirectory,'text-edits')),findProvider:createLocalRoomFindProvider(join(bridgeDirectory,'find-queries'))}}),dist=resolve(process.env.LOCAL_AGENT_DIST_DIR || 'dist');
+if(!existsSync(join(dist,'index.html')))throw new Error(`Build the local experiment before serving it: missing ${join(dist,'index.html')}`);
+app.get('/',async(_request,reply)=>reply.redirect('/mobile'));
+for(const route of ['/mobile','/scan-review'])app.get(route,async(_request,reply)=>reply.type('text/html').header('Cache-Control','no-store').send(readFileSync(safeScanFile(dist,'index.html'))));
+app.get<{Params:{'*':string}}>('/assets/*',async(request,reply)=>{try{const name=request.params['*'];if(!/^[a-zA-Z0-9_.-]+$/.test(name))return reply.code(404).send();const mime:Record<string,string>={js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',woff2:'font/woff2'},ext=name.split('.').at(-1);if(!mime[ext!])return reply.code(404).send();return reply.type(mime[ext!]).send(readFileSync(safeScanFile(join(dist,'assets'),name)));}catch{return reply.code(404).send();}});
+await app.listen({host:'127.0.0.1',port});console.log(`Local ${agentArg} experiment: http://127.0.0.1:${port}/mobile\nWorkspace: ${resolve(workspace)}\nBridge: ${resolve(bridgeDirectory)}`);
+let stopping=false;const shutdown=async()=>{if(stopping)return;stopping=true;provider.close();await app.close();process.exitCode=0;};process.once('SIGINT',()=>{void shutdown();});process.once('SIGTERM',()=>{void shutdown();});

@@ -1,0 +1,12 @@
+.guided-capture {padding:16px;border:1px solid #bdd5c7;border-radius:14px;background:#f3f8f2;margin:12px 0;color:#203e32;}
+.guided-capture>div:first-child {display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.guided-capture p {margin:10px 0;font-size:13px;line-height:1.5;}
+.guided-capture small {display:block;margin-top:12px;line-height:1.5;color:#52675b;}
+.gc-phase {border-radius:20px;padding:5px 9px;background:#dfeadc;font-size:12px;font-weight:650;}
+.gc-addressed {background:#c4e4cf;}
+.gc-not-addressed,.gc-save-unconfirmed {background:#f3e0be;}
+.gc-actions {display:flex;gap:8px;flex-wrap:wrap;}
+.gc-actions button {min-height:48px;border:1px solid #bccfc0;border-radius:10px;background:white;color:#254936;padding:10px 14px;font:inherit;font-size:13px;}
+.gc-actions button.ls-primary {background:#284d3b;color:white;}
+.gc-actions button:disabled {opacity:.45;}
+.gc-actions button:focus-visible {outline:3px solid #2c7964;outline-offset:2px;}

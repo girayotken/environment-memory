@@ -1,0 +1,31 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import type {RoomMemory} from '../src/domain/room-memory-contracts.ts';
+import {findRoomMemory,roomFindVocabulary} from '../src/domain/room-find.ts';
+const source={viewId:'first',frameId:'first',sourceHash:'first',imageUrl:'/first',capturedAt:'2026-10-29T00:00:00Z'};
+const room:RoomMemory={roomId:'room',label:'Workshop',provenance:'agent-derived',visits:[],graph:{scope:'Partial',sourceViews:[source],nodes:[{id:'a',label:'Drill',kind:'portable',status:'provisional',attributes:[],evidence:[{viewId:'first',basis:'Visible',location:'Shelf'}]},{id:'b',label:'Saw',kind:'portable',status:'provisional',attributes:[],evidence:[]}],edges:[],identityGroups:[],unknowns:[],nodeOrigins:{},reviewNotes:[]},userEdits:[{nodeId:'a',revision:1,name:'Maket matkabım',groups:['Maket aletleri'],tags:['hobi'],lastRevisionId:'e1'},{nodeId:'b',revision:1,name:null,groups:['Maket aletleri'],tags:[],lastRevisionId:'e2'}]};
+test('personal name, group and tag lookup return source-bound last-seen evidence',()=>{
+ const before=JSON.stringify(room),v=roomFindVocabulary([room]);assert.ok(v.includes('Maket matkabım'));assert.ok(v.includes('hobi'));
+ const byName=findRoomMemory([room],{terms:['Maket matkabım']});assert.equal(byName.status,'found');assert.equal(byName.matches[0].location,'Shelf');assert.equal(byName.matches[0].identityMatch,null);assert.equal(byName.matches[0].source?.viewId,'first');
+ assert.equal(findRoomMemory([room],{terms:['Maket aletleri']}).status,'choices');assert.equal(findRoomMemory([room],{terms:['hobi']}).matches[0].nodeId,'a');assert.equal(findRoomMemory([room],{terms:[]}).status,'not_found');assert.throws(()=>findRoomMemory([room],{terms:['invented']}));assert.equal(JSON.stringify(room),before);
+});
+
+test('local find relay binds the response to the request and sends no location',async()=>{
+ const {mkdtempSync,readdirSync,readFileSync,writeFileSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {createLocalRoomFindProvider}=await import('../src/server/local-room-find-provider.ts');
+ const root=mkdtempSync(join(tmpdir(),'room-find-'));try{const pending=createLocalRoomFindProvider(root,2000)({text:'Maket matkabım nerede?',vocabulary:['Maket matkabım']});const folder=join(root,readdirSync(root)[0]);const ready=JSON.parse(readFileSync(join(folder,'ready.json'),'utf8')),prompt=readFileSync(join(folder,'prompt.txt'),'utf8');assert.match(prompt,/Maket matkabım/);assert.deepEqual(ready.responseContract,{requestHash:ready.requestHash,responseToken:ready.responseToken,provider:ready.provider,result:{terms:['exact vocabulary value']}});assert.doesNotMatch(prompt,/Shelf/);writeFileSync(join(folder,'response.json'),JSON.stringify({requestHash:ready.requestHash,responseToken:ready.responseToken,provider:ready.provider,result:{terms:['Maket matkabım']}}));assert.deepEqual(await pending,{terms:['Maket matkabım']});}finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('last-seen follows accepted movement and falls back when the newest link is withdrawn',()=>{
+ const r=structuredClone(room),node=r.graph.nodes[0];
+ for(const [id,hour,location] of [['moved','01','Tabletop'],['newest','02','Lower shelf']] as const){const view={viewId:id,frameId:id,sourceHash:id,imageUrl:`/${id}`,capturedAt:`2026-10-29T${hour}:00:00Z`};r.visits.push({schemaVersion:1,importId:id,roomId:r.roomId,visitId:id,label:id,summary:'Appearance',provenance:'authored-test',sourceViews:[view],proposals:[{id,nodeId:node.id,observationId:id,status:'likely-same',basis:'Comparison',alternatives:'Another instance possible',evidence:[{viewId:id,basis:'Visible',location}]}]});(r.continuityLinks??=[]).push({linkId:id,roomId:r.roomId,nodeId:node.id,observationId:id,source:view,state:'active',basis:'Provisional match'});}
+ const before=JSON.stringify(r);assert.equal(findRoomMemory([r],{terms:['Maket matkabım']}).matches[0].location,'Lower shelf');assert.equal(findRoomMemory([r],{terms:['Maket matkabım']}).matches[0].identityMatch,'probable');assert.equal(JSON.stringify(r),before);
+ const link=r.continuityLinks![1];r.continuityLinks![1]={...link,state:'withdrawn',withdrawal:{observationId:'correction',source:link.source,basis:'User separated it'}};
+ const result=findRoomMemory([r],{terms:['Maket matkabım']});assert.equal(result.matches[0].location,'Tabletop');assert.equal(result.matches[0].source?.viewId,'moved');assert.equal(result.matches[0].identityMatch,'probable');
+ const older=r.continuityLinks![0];r.continuityLinks![0]={...older,state:'withdrawn',withdrawal:{observationId:'correction2',source:older.source,basis:'Separated'}};const fallback=findRoomMemory([r],{terms:['Maket matkabım']}).matches[0];assert.equal(fallback.source?.viewId,'first');assert.equal(fallback.identityMatch,null);
+});
+test('missing locations stay unknown, duplicate names across rooms remain choices, and long names work',()=>{
+ const other=structuredClone(room);other.roomId='other';other.graph.nodes[0].evidence=[{viewId:'first',basis:'Visible'}];const result=findRoomMemory([room,other],{terms:['Maket matkabım']});assert.equal(result.status,'choices');assert.equal(result.matches[1].location,null);assert.equal(findRoomMemory([room],{terms:['Saw']}).matches[0].identityMatch,null);assert.equal(result.matches[1].source?.viewId,'first');
+ const long='a'.repeat(200);other.userEdits![0].name=long;assert.equal(findRoomMemory([other],{terms:[long]}).status,'found');
+});
+
+test('exact local lookup accepts only unique full names/labels and preserves constraints',async()=>{const {resolveExactRoomFind}=await import('../src/domain/room-find.ts');assert.deepEqual(resolveExactRoomFind([room],'Maket matkabım'),{terms:['Maket matkabım']});assert.deepEqual(resolveExactRoomFind([room],'Where is my Maket matkabım?'),{terms:['Maket matkabım']});assert.deepEqual(resolveExactRoomFind([room],'Maket matkabım nerede?'),{terms:['Maket matkabım']});assert.equal(resolveExactRoomFind([room],'Where is my Maket matkabım in Travel kit?'),null);assert.equal(resolveExactRoomFind([room],'not Maket matkabım'),null);assert.equal(resolveExactRoomFind([room,structuredClone(room)],'Maket matkabım'),null);assert.equal(resolveExactRoomFind([room],'hobi'),null);});

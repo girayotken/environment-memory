@@ -1,0 +1,26 @@
+import {existsSync,readFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {createScanReviewApp,safeScanFile} from '../src/server/scan-review.ts';
+import {createLocalVoiceProvider} from '../src/server/local-voice-provider.ts';
+import {createRoomObserverProvider} from '../src/server/room-observer-provider.ts';
+import {DemoBudget} from '../src/server/demo-budget.ts';
+import {createDemoTextProviders} from '../src/server/demo-text-provider.ts';
+import {initializeEmptyScanWorkspace} from '../src/server/empty-scan-workspace.ts';
+// This launcher requires a new, explicit authorization. Never prints or loads credentials.
+const [workspace,budgetDirectory,portArg='7404']=process.argv.slice(2),port=Number(portArg);
+if(!workspace||!budgetDirectory||!Number.isInteger(port)||port<1||port>65535||process.argv.length>5)throw new Error('Usage: meta-demo-server.ts WORKSPACE BUDGET_DIRECTORY [PORT]');
+if(process.env.ENABLE_META_DEMO!=='true'||process.env.ENABLE_ROOM_OBSERVER!=='true'||process.env.META_CREDITS_CONFIRMED!=='true'||!process.env.MODEL_API_KEY)throw new Error('Explicit demo and observer enablement, confirmed credits and server key required');
+process.env.ENABLE_SCAN_TEXT_AGENT='false';process.env.ENABLE_SCAN_DETECTION='false';
+if(!existsSync(workspace))initializeEmptyScanWorkspace(workspace);
+const budget=new DemoBudget(budgetDirectory,{authorizationId:process.env.DEMO_AUTHORIZATION_ID??'',capUsd:Number(process.env.DEMO_CAP_USD),requestLimit:Number(process.env.DEMO_REQUEST_LIMIT),frameLimit:Number(process.env.DEMO_FRAME_LIMIT),outputTokens:Number(process.env.DEMO_OUTPUT_TOKENS)});
+const provider=createRoomObserverProvider({sharedBudget:budget});
+const voice=process.env.LOCAL_VOICE_PYTHON&&process.env.LOCAL_VOICE_MODEL&&process.env.LOCAL_VOICE_FFMPEG?createLocalVoiceProvider({python:process.env.LOCAL_VOICE_PYTHON,model:process.env.LOCAL_VOICE_MODEL,ffmpeg:process.env.LOCAL_VOICE_FFMPEG,bridge:resolve('scripts/local-voice-transcribe.py')}):undefined;
+const findRef=process.env.DEMO_FIND_AUTHORIZATION_REF,findText=process.env.DEMO_FIND_AUTHORIZED_TEXT;
+if(Boolean(findRef)!==Boolean(findText))throw new Error('Both find authorization reference and exact transcript are required');
+const app=createScanReviewApp(workspace,{port,voice,allowTestAudio:process.env.DEMO_ALLOW_TEST_AUDIO==='true',roomObserver:{provider,allowPaid:true,...createDemoTextProviders(budget,{findTrial:findRef&&findText?{authorizationRef:findRef,text:findText}:undefined})}}),dist=resolve(process.env.DEMO_DIST_DIR || 'dist');
+if(!existsSync(join(dist,'index.html')))throw new Error(`Build the local experiment before serving it: missing ${join(dist,'index.html')}`);
+app.get('/',async(_request,reply)=>reply.redirect('/mobile'));
+for(const route of ['/mobile','/scan-review'])app.get(route,async(_request,reply)=>reply.type('text/html').header('Cache-Control','no-store').send(readFileSync(safeScanFile(dist,'index.html'))));
+app.get<{Params:{'*':string}}>('/assets/*',async(request,reply)=>{try{const name=request.params['*'];if(!/^[a-zA-Z0-9_.-]+$/.test(name))return reply.code(404).send();const mime:Record<string,string>={js:'text/javascript',css:'text/css',png:'image/png',svg:'image/svg+xml',woff2:'font/woff2'},ext=name.split('.').at(-1);if(!mime[ext!])return reply.code(404).send();return reply.type(mime[ext!]).send(readFileSync(safeScanFile(join(dist,'assets'),name)));}catch{return reply.code(404).send();}});
+await app.listen({host:'127.0.0.1',port});console.log(`Meta demo: http://127.0.0.1:${port}/mobile\nWorkspace: ${resolve(workspace)}\nBudget: ${resolve(budgetDirectory)}`);
+let stopping=false;const shutdown=async()=>{if(stopping)return;stopping=true;await app.close();budget.close();process.exitCode=0;};process.once('SIGINT',()=>{void shutdown();});process.once('SIGTERM',()=>{void shutdown();});
